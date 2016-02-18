@@ -18,8 +18,8 @@ SCREEN = pygame.display.set_mode(SCREENSIZE,FULLSCREEN)
 #la_souris_flipped   = pygame.transform.flip(la_souris_flipped, 1, 0)
 #la_souris_mask   = pygame.mask.from_surface(la_souris)
 #la_souris_mask   = pygame.mask.from_surface(la_souris)
-le_fond   = pygame.image.load("data/le_fond.png").convert()
-le_fond   = pygame.transform.scale(le_fond,(SCREENSIZE[0],SCREENSIZE[1]))
+#le_fond   = pygame.image.load("data/le_fond.png").convert()
+#le_fond   = pygame.transform.scale(le_fond,(SCREENSIZE[0],SCREENSIZE[1]))
 #la_motte  = pygame.image.load("data/la_motte.png").convert_alpha()
 #la_motte  = pygame.transform.scale(la_motte,(SCREENSIZE[0]/2,SCREENSIZE[1]/2))
 
@@ -33,7 +33,10 @@ class Un_Objet(pygame.sprite.Sprite):
 		pygame.sprite.Sprite.__init__(self, self.containers)
 
 		self.image = pygame.image.load("data/"+name+".png").convert_alpha()
-		self.image = pygame.transform.scale(self.image,(self.image.get_width()/ratio,self.image.get_height()/ratio))
+		if ratio > 0:
+			self.image = pygame.transform.scale(self.image,(self.image.get_width()/ratio,self.image.get_height()/ratio))
+		else:
+			self.image = pygame.transform.scale(self.image,(SCREENSIZE[0],SCREENSIZE[1]))
 		self.rect  = self.image.get_rect()
 		self.mask  = pygame.mask.from_surface(self.image)
 		self.son   = [ pygame.mixer.Sound("data/"+name+"1.wav"), pygame.mixer.Sound("data/"+name+"2.wav") ]
@@ -55,15 +58,68 @@ class Un_Objet(pygame.sprite.Sprite):
 
 
 class Souris( Un_Objet ):
+	
+	start_rect = None
+	dest_rect = None
+
+	number_of_steps = 0
+	current_step = 0
+	speed = 15
 
 	def __init__(self):
 		Un_Objet.__init__(self, "la_souris", 20)
+		self.state = "WHEREDOIGO"
+		self.start_rect = self.rect.copy()
+		self.dest_rect = self.rect.copy()
+
 	
 	def event_loop(self):
 		pass
 
+	def distance_to(self, to_rect):
+		x=self.rect.center[0]
+		y=self.rect.center[1]
+		dx=to_rect.center[0]
+		dy=to_rect.center[1]
+
+		return math.sqrt( (x-dx)*(x-dx) + (y-dy)*(y-dy) )
+
 	def update_position(self):
-		pass
+		if self.state == "WHEREDOIGO":
+
+			self.start_rect.center = self.rect.center
+
+			self.dest_rect.center = (random.randint(self.start_rect.x, self.start_rect.x + SCREENSIZE[0]/3), random.randint(self.start_rect.y - SCREENSIZE[1]/2, self.start_rect.y))
+
+			print("I'm going from", self.start_rect, "to", self.dest_rect, "distance=",self.distance_to( self.dest_rect ))
+			self.number_of_steps = self.distance_to( self.dest_rect )/self.speed
+
+			i=random.randint(0,len(self.son)-1)
+			self.son[i].play()
+			self.state = "GOOUT"
+
+		elif self.state == "GOOUT":
+
+			self.rect.x = self.start_rect.x + ((self.dest_rect.x-self.start_rect.x)*self.current_step)/self.number_of_steps
+			self.rect.y = self.start_rect.y + ((self.dest_rect.y-self.start_rect.y)*self.current_step)/self.number_of_steps
+
+			self.current_step += 1
+
+			if self.current_step >= self.number_of_steps:
+				self.state = "GOIN"
+
+		elif self.state == "GOIN":
+
+			self.rect.x = self.start_rect.x + ((self.dest_rect.x-self.start_rect.x)*self.current_step)/self.number_of_steps
+			self.rect.y = self.start_rect.y + ((self.dest_rect.y-self.start_rect.y)*self.current_step)/self.number_of_steps
+
+			self.current_step -= 1
+
+			if self.current_step == 0:
+				self.state = "WHEREDOIGO"
+
+
+
 
 
 class Chat( Un_Objet ):
@@ -125,15 +181,26 @@ class Motte( Un_Objet ):
 	def update_position(self):
 		pass
 
+class Fond( Un_Objet ):
+
+	def __init__(self):
+		Un_Objet.__init__(self, "le_fond", -1)
+	
+	def event_loop(self):
+		pass
+
+	def update_position(self):
+		pass
 
 #####           
 def main():
-	SCREEN.blit(le_fond,(0,0))
+	toutes_les_boites.clear(SCREEN, le_fond.image)
+
 	la_souris.update()
 	le_chat.update()
 	la_motte.update()
 
-        #draw the scene
+        # Draw the scene
         dirty = toutes_les_boites.draw(SCREEN)
         pygame.display.update(dirty)  
        	#pygame.display.update()
@@ -141,18 +208,28 @@ def main():
 
 #####
 if __name__ == "__main__":
-	la_boite_du_chat = pygame.sprite.Group()
+	la_boite_du_fond = pygame.sprite.Group()
 	la_boite_de_la_souris = pygame.sprite.Group()
+	la_boite_du_chat = pygame.sprite.Group()
 	la_boite_de_la_motte  = pygame.sprite.Group()
 	toutes_les_boites = pygame.sprite.RenderUpdates()
 
-	Chat.containers = la_boite_du_chat, toutes_les_boites
-	Souris.containers = la_boite_de_la_souris, toutes_les_boites
+	Fond.containers = la_boite_du_fond # , toutes_les_boites
 	Motte.containers = la_boite_de_la_motte, toutes_les_boites
+	Souris.containers = la_boite_de_la_souris, toutes_les_boites
+	Chat.containers = la_boite_du_chat, toutes_les_boites
 
+	le_fond   = Fond()
 	le_chat   = Chat()
 	la_souris = Souris()
-	la_motte = Motte()
+	la_motte  = Motte()
+
+	la_motte.rect.bottom = le_fond.rect.bottom
+	la_souris.rect.center = la_motte.rect.center
+	la_souris.rect.bottom = la_motte.rect.bottom
+	
+	SCREEN.blit(le_fond.image,(0,0))
+        pygame.display.flip()  
 	
 	while 1:
 		main()
